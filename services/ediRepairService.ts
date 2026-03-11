@@ -1,13 +1,11 @@
-import { GoogleGenAI } from "@google/genai";
 
-const getApiKey = () => {
-  return (import.meta as any).env?.VITE_GEMINI_API_KEY || (process as any).env?.GEMINI_API_KEY || "";
-};
+import { GoogleGenAI } from "@google/genai";
 
 /**
  * Repairs and normalizes an EDI 810 string using the specialized repair engine logic.
  */
 export const repairEDIStream = async (rawEdi: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
   
   const systemInstruction = `
     You are an expert X12 EDI 810 (Invoice) "repair + normalization" engine for version 005010.
@@ -32,22 +30,15 @@ export const repairEDIStream = async (rawEdi: string): Promise<string> => {
   `;
 
   try {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      throw new Error("Gemini API key is not configured.");
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: `REPAIR THIS EDI INPUT:\n\n${rawEdi}` }] }],
+      model: 'gemini-3-flash-preview',
+      contents: `REPAIR THIS EDI INPUT:\n\n${rawEdi}`,
       config: {
-        systemInstruction,
-        temperature: 0.1
+        systemInstruction
       }
     });
 
-    return response.text?.trim() || '';
+    return response.text.trim();
   } catch (error) {
     console.error("EDI Repair Error:", error);
     throw new Error("Failed to refine EDI stream via AI.");

@@ -1,27 +1,9 @@
-import { GoogleGenAI } from "@google/genai";
+
+import { GoogleGenAI, Type } from "@google/genai";
 import { DocumentResult, LineItem, ExtraField } from "../types";
 import { validateCode } from "./validationService";
-import { generateEDI810FromData } from "./ediService";
-import { generateCSVFromData } from "./csvService";
 
-const getApiKey = () => {
-  // Priority: platform-injected key -> Vite env variable
-  return import.meta.env.VITE_GEMINI_API_KEY || "";
-};
-
-/**
- * Cleans a string that might contain markdown code blocks.
- */
-const cleanJsonString = (text: string): string => {
-  // Remove markdown code blocks if present
-  let cleaned = text.trim();
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-  }
-  return cleaned.trim();
-};
-
-const resizeImage = (file: File, maxWidth = 1536, maxHeight = 1536): Promise<string> => {
+const resizeImage = (file: File, maxWidth = 2048, maxHeight = 2048): Promise<string> => {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -49,7 +31,7 @@ const resizeImage = (file: File, maxWidth = 1536, maxHeight = 1536): Promise<str
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.75).split(',')[1]);
+        resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
       };
     };
   });
@@ -179,98 +161,122 @@ export const normalizeData = (rawData: any, rawSections: any): DocumentResult =>
 export const extractStitchedInvoiceData = async (
   files: File[]
 ): Promise<DocumentResult[]> => {
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
   const parts = await Promise.all(files.map(async (f) => ({
     inlineData: { mimeType: 'image/jpeg', data: await resizeImage(f) }
   })));
 
   const systemInstruction = `
-    You are a Senior Auditor and EDI Specialist. Extract EVERY detail from the provided images of invoices/receipts with 100% accuracy.
+    You are a Senior Auditor and EDI Specialist. Your task is to extract EVERY SINGLE DETAIL from the provided images of invoices/receipts with 100% accuracy and ZERO LOSS of information.
     
-    CRITICAL:
-    1. DOCUMENT IDENTIFICATION: Analyze up to 5 images. They could be multiple pages of one invoice or separate receipts. Produce one entry in "document_groups" for EACH distinct document.
-    2. EXHAUSTIVE EXTRACTION: Capture EVERY line item (product, service, fee, tax). ZERO LOSS.
-    3. LINE ITEM DETAILS: Capture full Description, exact Quantity (default 1), Unit Cost (gross price), Extended Amount, and any UPC/GTIN/SKU.
-    4. PACKAGING: Extract "units_per_case" and "pack_structure_raw" (e.g., "Case of 12").
-    5. CONSISTENCY: Ensure (Quantity * Unit Cost) = Extended Amount. Note discrepancies in "parsing_warnings".
+    CRITICAL INSTRUCTIONS:
+    1. DOCUMENT IDENTIFICATION:
+       - You are provided with up to 5 images. These images could be:
+         a) Multiple pages of a single invoice.
+         b) Multiple separate, distinct receipts/invoices.
+         c) A mix of both.
+       - You MUST carefully analyze each image to determine if it's a continuation of a previous document or a new one.
+       - Produce one entry in the "document_groups" array for EACH distinct document found.
+       - If you see 5 separate receipts, you MUST produce 5 entries. If you see 5 pages of 1 invoice, produce 1 entry.
+    2. EXHAUSTIVE EXTRACTION (ZERO LOSS):
+       - Do NOT skip any line items. Extract EVERY product, service, fee, tax, or adjustment listed.
+       - If a receipt has 100 items, you MUST extract 100 items. 
+       - If an item description is long, capture the full description.
+       - If there are handwritten notes or stamps, capture them in "extra_fields_audit_text".
+    3. LINE ITEM DETAILS:
+       - Description: Full title as it appears.
+       - Quantity: Extract exactly as shown. If missing, assume 1.
+       - Unit Cost: Extract the price per unit (gross price) exactly as shown on the invoice. This is the most important field for the retail tags. If missing, calculate: extended_amount / quantity.
+       - Extended Amount: The total for that line.
+       - UPC/GTIN/SKU: Extract any codes associated with the item.
+    4. PACKAGING & LOGISTICS:
+       - Pay close attention to packaging terms (e.g., "Case of 12", "Pack", "Box", "Lbs").
+       - Extract "units_per_case" and "pack_structure_raw" if mentioned.
+    5. MATHEMATICAL CONSISTENCY:
+       - Ensure that (Quantity * Unit Cost) matches the Extended Amount. If there's a discrepancy, note it in "parsing_warnings".
+    6. ADAPTIVE VISION:
+       - If an image is rotated, blurry, or has poor lighting, use all available context to read it. Do not give up.
     
-    Output strictly valid JSON. No conversational text.
+    Output MUST be a strictly valid JSON object with a "document_groups" array. No conversational text.
   `;
 
   const schema = {
-    type: "object",
+    type: Type.OBJECT,
     properties: {
       document_groups: {
-        type: "array",
+        type: Type.ARRAY,
         items: {
-          type: "object",
+          type: Type.OBJECT,
           properties: {
             lossless_json: {
-              type: "object",
+              type: Type.OBJECT,
               properties: {
                 header: { 
-                  type: "object",
+                  type: Type.OBJECT,
                   properties: {
-                    vendor_name: { type: "string" },
-                    vendor_address: { type: "string" },
-                    vendor_city: { type: "string" },
-                    vendor_state: { type: "string" },
-                    vendor_zip: { type: "string" },
-                    vendor_phone: { type: "string" },
-                    buyer_name: { type: "string" },
-                    buyer_address: { type: "string" },
-                    buyer_city: { type: "string" },
-                    buyer_state: { type: "string" },
-                    buyer_zip: { type: "string" },
-                    "customer_id/account": { type: "string" },
-                    invoice_number: { type: "string" },
-                    invoice_date: { type: "string" },
-                    delivery_datetime: { type: "string" },
-                    terms: { type: "string" },
-                    po_number: { type: "string" },
-                    route_stop_driver_salesrep: { type: "string" },
-                    currency: { type: "string" }
+                    vendor_name: { type: Type.STRING },
+                    vendor_address: { type: Type.STRING },
+                    vendor_city: { type: Type.STRING },
+                    vendor_state: { type: Type.STRING },
+                    vendor_zip: { type: Type.STRING },
+                    vendor_phone: { type: Type.STRING },
+                    buyer_name: { type: Type.STRING },
+                    buyer_address: { type: Type.STRING },
+                    buyer_city: { type: Type.STRING },
+                    buyer_state: { type: Type.STRING },
+                    buyer_zip: { type: Type.STRING },
+                    "customer_id/account": { type: Type.STRING },
+                    invoice_number: { type: Type.STRING },
+                    invoice_date: { type: Type.STRING },
+                    delivery_datetime: { type: Type.STRING },
+                    terms: { type: Type.STRING },
+                    po_number: { type: Type.STRING },
+                    route_stop_driver_salesrep: { type: Type.STRING },
+                    currency: { type: Type.STRING }
                   }
                 },
                 totals: { 
-                  type: "object", 
+                  type: Type.OBJECT, 
                   properties: {
-                    invoice_total: { type: "number" },
-                    total_due: { type: "number" },
-                    total_discount: { type: "number" },
-                    total_deposit: { type: "number" },
-                    total_tax: { type: "number" },
-                    total_credits: { type: "number" },
-                    subtotal: { type: "number" }
+                    invoice_total: { type: Type.NUMBER },
+                    total_due: { type: Type.NUMBER },
+                    total_discount: { type: Type.NUMBER },
+                    total_deposit: { type: Type.NUMBER },
+                    total_tax: { type: Type.NUMBER },
+                    total_credits: { type: Type.NUMBER },
+                    subtotal: { type: Type.NUMBER }
                   }
                 },
                 line_items: { 
-                  type: "array", 
+                  type: Type.ARRAY, 
                   items: { 
-                    type: "object",
+                    type: Type.OBJECT,
                     properties: {
-                      line_no: { type: "number" },
-                      item_id: { type: "string" },
-                      upc_gtin: { type: "string" },
-                      description: { type: "string" },
-                      qty_purchased: { type: "number" },
-                      uom_purchased: { type: "string" },
-                      units_per_case: { type: "number" },
-                      pack_structure_raw: { type: "string" },
-                      container_size_raw: { type: "string" },
-                      retail_price: { type: "string" },
-                      gross_price: { type: "string" },
-                      discount: { type: "number" },
-                      deposit: { type: "number" },
-                      sugar_fee: { type: "number" },
-                      net_line_total: { type: "string" }
+                      line_no: { type: Type.NUMBER },
+                      item_id: { type: Type.STRING },
+                      upc_gtin: { type: Type.STRING },
+                      description: { type: Type.STRING },
+                      qty_purchased: { type: Type.NUMBER },
+                      uom_purchased: { type: Type.STRING },
+                      units_per_case: { type: Type.NUMBER },
+                      pack_structure_raw: { type: Type.STRING },
+                      container_size_raw: { type: Type.STRING },
+                      retail_price: { type: Type.STRING },
+                      gross_price: { type: Type.STRING },
+                      discount: { type: Type.NUMBER },
+                      deposit: { type: Type.NUMBER },
+                      sugar_fee: { type: Type.NUMBER },
+                      net_line_total: { type: Type.STRING }
                     }
                   } 
                 },
-                confidence_overall: { type: "number" },
-                parsing_warnings: { type: "array", items: { type: "string" } }
+                confidence_overall: { type: Type.NUMBER },
+                parsing_warnings: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
             },
-            extra_fields_audit_text: { type: "string" }
+            csv_preview: { type: Type.STRING },
+            edi_810_text: { type: Type.STRING },
+            extra_fields_audit_text: { type: Type.STRING }
           }
         }
       }
@@ -279,55 +285,31 @@ export const extractStitchedInvoiceData = async (
   };
 
   try {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      throw new Error("Gemini API key is not configured. Please set VITE_GEMINI_API_KEY in your environment variables.");
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [
-        { parts: [...parts, { text: "Stitch and audit these photos. Extract structured data for EVERY line item. Ensure 100% accuracy." }] }
-      ],
-      config: {
+      model: 'gemini-3-flash-preview',
+      contents: { parts: [...parts, { text: "Stitch and audit these photos for high-fidelity extraction. Ensure every line item is captured." }] },
+      config: { 
         systemInstruction,
+        temperature: 0.1,
         responseMimeType: "application/json",
-        responseSchema: schema,
-        temperature: 0.1
+        responseSchema: schema
       }
     });
 
-    const text = cleanJsonString(response.text || '{}');
-    let result;
-    try {
-      result = JSON.parse(text);
-    } catch (parseErr) {
-      console.error("JSON Parse Error. Raw text:", text);
-      throw new Error(`Failed to parse AI response: ${parseErr instanceof Error ? parseErr.message : 'Invalid JSON'}`);
-    }
+    const result = JSON.parse(response.text || "{}");
     
     if (!result.document_groups || !Array.isArray(result.document_groups)) {
-      throw new Error("Invalid response format from AI: Missing document_groups.");
+      throw new Error("Invalid response format from AI.");
     }
 
     return result.document_groups.map((group: any) => {
-      // Use local services to generate EDI and CSV from the structured JSON
-      // This is much more reliable than asking the AI to generate large text blocks
-      const normalized = normalizeData(group.lossless_json, {});
-      
       const sections = {
         json: JSON.stringify(group.lossless_json, null, 2),
-        csv: generateCSVFromData(normalized),
-        edi: generateEDI810FromData(normalized),
+        csv: group.csv_preview || "",
+        edi: group.edi_810_text || "",
         extra: group.extra_fields_audit_text || ""
       };
-      
-      // Update normalized data with the generated sections
-      normalized.edi_810.edi_string = sections.edi;
-      normalized.sections_raw = sections;
-      
-      return normalized;
+      return normalizeData(group.lossless_json, sections);
     });
 
   } catch (e) {
