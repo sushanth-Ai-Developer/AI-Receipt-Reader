@@ -5,7 +5,7 @@ import { GoogleGenAI } from "@google/genai";
  * Repairs and normalizes an EDI 810 string using the specialized repair engine logic.
  */
 export const repairEDIStream = async (rawEdi: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   
   const systemInstruction = `
     You are an expert X12 EDI 810 (Invoice) "repair + normalization" engine for version 005010.

@@ -161,7 +161,7 @@ export const normalizeData = (rawData: any, rawSections: any): DocumentResult =>
 export const extractStitchedInvoiceData = async (
   files: File[]
 ): Promise<DocumentResult[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.VITE_API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const parts = await Promise.all(files.map(async (f) => ({
     inlineData: { mimeType: 'image/jpeg', data: await resizeImage(f) }
   })));
@@ -186,7 +186,7 @@ export const extractStitchedInvoiceData = async (
     3. LINE ITEM DETAILS:
        - Description: Full title as it appears.
        - Quantity: Extract exactly as shown. If missing, assume 1.
-       - Unit Cost: Extract the price per unit. If missing, calculate: extended_amount / quantity.
+       - Unit Cost: Extract the price per unit (gross price) exactly as shown on the invoice. This is the most important field for the retail tags. If missing, calculate: extended_amount / quantity.
        - Extended Amount: The total for that line.
        - UPC/GTIN/SKU: Extract any codes associated with the item.
     4. PACKAGING & LOGISTICS:
@@ -261,12 +261,12 @@ export const extractStitchedInvoiceData = async (
                       units_per_case: { type: Type.NUMBER },
                       pack_structure_raw: { type: Type.STRING },
                       container_size_raw: { type: Type.STRING },
-                      retail_price: { type: Type.NUMBER },
-                      gross_price: { type: Type.NUMBER },
+                      retail_price: { type: Type.STRING },
+                      gross_price: { type: Type.STRING },
                       discount: { type: Type.NUMBER },
                       deposit: { type: Type.NUMBER },
                       sugar_fee: { type: Type.NUMBER },
-                      net_line_total: { type: Type.NUMBER }
+                      net_line_total: { type: Type.STRING }
                     }
                   } 
                 },

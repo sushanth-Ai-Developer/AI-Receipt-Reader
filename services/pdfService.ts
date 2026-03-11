@@ -45,13 +45,13 @@ export const generateRetailLabelPDF = async (data: DocumentResult): Promise<Blob
     doc.text(desc, currentX + colWidth / 2, currentY + 6, { align: 'center' });
 
     // Price (Large)
-    const displayPrice = item.unit_cost || item.retail_ssp_msrp || 0;
+    const displayPrice = (item.unit_cost !== null && item.unit_cost !== undefined) ? item.unit_cost : (item.retail_ssp_msrp || 0);
     const currencySymbol = data.invoice_identity.currency === 'USD' || !data.invoice_identity.currency ? '$' : data.invoice_identity.currency;
     
-    if (displayPrice > 0) {
+    if (displayPrice !== null && displayPrice !== undefined) {
       doc.setFontSize(14);
       doc.setTextColor(0);
-      doc.text(`${currencySymbol}${displayPrice.toFixed(2)}`, currentX + colWidth / 2, currentY + 14, { align: 'center' });
+      doc.text(`${currencySymbol}${Number(displayPrice).toFixed(2)}`, currentX + colWidth / 2, currentY + 14, { align: 'center' });
     } else {
       doc.setFontSize(8);
       doc.setTextColor(150);

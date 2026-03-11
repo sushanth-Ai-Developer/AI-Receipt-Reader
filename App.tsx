@@ -28,7 +28,7 @@ const BarcodePreview: React.FC<{ item: LineItem; currency?: string }> = ({ item,
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const qrRef = useRef<HTMLImageElement>(null);
   const { code_value: code, code_type: type, description, retail_ssp_msrp, unit_cost } = item;
-  const price = unit_cost || retail_ssp_msrp || 0;
+  const price = (unit_cost !== null && unit_cost !== undefined) ? unit_cost : (retail_ssp_msrp || 0);
   const currencySymbol = currency === 'USD' || !currency ? '$' : currency;
 
   useEffect(() => {
@@ -68,7 +68,7 @@ const BarcodePreview: React.FC<{ item: LineItem; currency?: string }> = ({ item,
   return (
     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center space-y-2 w-full max-w-[180px]">
       <div className="text-[8px] font-black text-slate-900 uppercase truncate w-full text-center">{description}</div>
-      <div className="text-sm font-black text-indigo-600">{currencySymbol}{price?.toFixed(2) || '0.00'}</div>
+      <div className="text-sm font-black text-indigo-600">{currencySymbol}{Number(price).toFixed(2)}</div>
       <canvas ref={canvasRef} className="max-w-full h-auto" />
       {!code && <div className="text-[10px] text-slate-400 font-bold uppercase py-4">No Code</div>}
     </div>
