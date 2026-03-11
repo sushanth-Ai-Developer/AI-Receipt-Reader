@@ -1,10 +1,24 @@
 import { GoogleGenAI } from "@google/genai";
 import { DocumentResult, LineItem, ExtraField } from "../types";
 import { validateCode } from "./validationService";
+import { generateEDI810FromData } from "./ediService";
+import { generateCSVFromData } from "./csvService";
 
 const getApiKey = () => {
   // Priority: platform-injected key -> Vite env variable
-  return (import.meta as any).env?.VITE_GEMINI_API_KEY || (process as any).env?.GEMINI_API_KEY || "";
+  return import.meta.env.VITE_GEMINI_API_KEY || "";
+};
+
+/**
+ * Cleans a string that might contain markdown code blocks.
+ */
+const cleanJsonString = (text: string): string => {
+  // Remove markdown code blocks if present
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+  }
+  return cleaned.trim();
 };
 
 const resizeImage = (file: File, maxWidth = 1536, maxHeight = 1536): Promise<string> => {
@@ -256,8 +270,6 @@ export const extractStitchedInvoiceData = async (
                 parsing_warnings: { type: "array", items: { type: "string" } }
               }
             },
-            csv_preview: { type: "string" },
-            edi_810_text: { type: "string" },
             extra_fields_audit_text: { type: "string" }
           }
         }
@@ -276,7 +288,7 @@ export const extractStitchedInvoiceData = async (
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [
-        { parts: [...parts, { text: "Stitch and audit these photos for high-fidelity extraction. Ensure every line item is captured." }] }
+        { parts: [...parts, { text: "Stitch and audit these photos. Extract structured data for EVERY line item. Ensure 100% accuracy." }] }
       ],
       config: {
         systemInstruction,
@@ -286,21 +298,36 @@ export const extractStitchedInvoiceData = async (
       }
     });
 
-    const text = response.text || '{}';
-    const result = JSON.parse(text);
+    const text = cleanJsonString(response.text || '{}');
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch (parseErr) {
+      console.error("JSON Parse Error. Raw text:", text);
+      throw new Error(`Failed to parse AI response: ${parseErr instanceof Error ? parseErr.message : 'Invalid JSON'}`);
+    }
     
     if (!result.document_groups || !Array.isArray(result.document_groups)) {
-      throw new Error("Invalid response format from AI.");
+      throw new Error("Invalid response format from AI: Missing document_groups.");
     }
 
     return result.document_groups.map((group: any) => {
+      // Use local services to generate EDI and CSV from the structured JSON
+      // This is much more reliable than asking the AI to generate large text blocks
+      const normalized = normalizeData(group.lossless_json, {});
+      
       const sections = {
         json: JSON.stringify(group.lossless_json, null, 2),
-        csv: group.csv_preview || "",
-        edi: group.edi_810_text || "",
+        csv: generateCSVFromData(normalized),
+        edi: generateEDI810FromData(normalized),
         extra: group.extra_fields_audit_text || ""
       };
-      return normalizeData(group.lossless_json, sections);
+      
+      // Update normalized data with the generated sections
+      normalized.edi_810.edi_string = sections.edi;
+      normalized.sections_raw = sections;
+      
+      return normalized;
     });
 
   } catch (e) {
