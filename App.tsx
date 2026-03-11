@@ -67,7 +67,7 @@ const BarcodePreview: React.FC<{ item: LineItem; currency?: string }> = ({ item,
 
   return (
     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center space-y-2 w-full max-w-[180px]">
-      <div className="text-[8px] font-black text-slate-900 uppercase truncate w-full text-center">{description}</div>
+      <div className="text-[8px] font-black text-slate-900 uppercase truncate w-full text-center" title={description}>{description}</div>
       <div className="text-sm font-black text-indigo-600">{currencySymbol}{Number(price).toFixed(2)}</div>
       <canvas ref={canvasRef} className="max-w-full h-auto" />
       {!code && <div className="text-[10px] text-slate-400 font-bold uppercase py-4">No Code</div>}
@@ -355,6 +355,9 @@ const App: React.FC = () => {
           <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full max-w-xs mx-auto">
             <div className="h-full bg-indigo-600 animate-pulse w-full" />
           </div>
+          <p className="text-gray-400 text-xs mt-3">
+            ⏱ Typically takes 30–90 seconds depending on receipt count
+          </p>
           <p className="mt-8 text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">Cross-referencing photos and calculating unit costs...</p>
         </div>
       </div>
@@ -439,6 +442,18 @@ const DocResultView: React.FC<{
   
   if (!inv.data) return null;
 
+  const displayConfidence = (val: number | undefined) => {
+    if (!val) return '0%';
+    return val <= 1 ? `${Math.round(val * 100)}%` : `${Math.round(val)}%`;
+  };
+
+  const formatEDI = (raw: string | undefined) =>
+    (raw || '')
+      .split('~')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+      .join('~\n');
+
   const confidence = inv.data.invoice_identity.confidence_score_0_to_100;
 
   const downloadCSV = () => {
@@ -511,7 +526,7 @@ const DocResultView: React.FC<{
                   <SummaryRow label="Vendor" value={inv.data.invoice_identity.vendor_name} />
                   <SummaryRow label="Buyer" value={inv.data.invoice_identity.buyer_name} />
                   <SummaryRow label="Date" value={inv.data.invoice_identity.invoice_date} />
-                  <SummaryRow label="Confidence" value={confidence + '%'} />
+                  <SummaryRow label="Confidence" value={displayConfidence(confidence)} />
                   <SummaryRow label="Input Files" value={inv.data.invoice_identity.source_images_count + ' photos'} />
                 </div>
                 
@@ -603,11 +618,19 @@ const DocResultView: React.FC<{
                             <div className="text-[9px] text-slate-400 uppercase">{item.uom_purchased}</div>
                           </td>
                           <td className="px-4 py-5 text-center">
-                            <div className="font-black text-slate-900">{item.pack_structure_raw || '-'}</div>
+                            <div className="font-black text-slate-900">
+                              {item.units_per_case ? `${item.pack_structure_raw || 'Pack'} (${item.units_per_case})` : 'Single Unit'}
+                            </div>
                             <div className="text-[9px] text-slate-400 uppercase">Units: {item.units_per_case || '1'}</div>
                           </td>
                           <td className="px-4 py-5 text-center">
-                            <div className="font-black text-slate-900">${(item.unit_cost || 0).toFixed(2)}</div>
+                            <div className="font-black text-slate-900">
+                              {item.unit_cost && item.unit_cost > 0
+                                ? `$${Number(item.unit_cost).toFixed(2)}`
+                                : item.extended_amount && item.qty_purchased
+                                ? `$${(item.extended_amount / item.qty_purchased).toFixed(2)}`
+                                : 'N/A'}
+                            </div>
                             <div className="text-[9px] text-slate-400 uppercase">Ext: ${(item.extended_amount || 0).toFixed(2)}</div>
                           </td>
                           <td className="px-6 py-5">
@@ -648,15 +671,11 @@ const DocResultView: React.FC<{
                  </div>
                </div>
                <div className="flex-1 bg-slate-950 rounded-[40px] p-12 font-mono text-[12px] text-emerald-400 border border-slate-800 shadow-2xl overflow-auto leading-relaxed">
-                  {inv.data.edi_810?.edi_string ? inv.data.edi_810.edi_string.split('~').map((seg: string, i: number) => {
-                    if (!seg.trim()) return null;
-                    return (
-                      <div key={i} className="mb-2 group flex hover:bg-emerald-900/10 px-4 py-1 rounded transition-colors">
-                        <span className="text-emerald-900 mr-6 select-none font-bold opacity-30">{(i+1).toString().padStart(3, '0')}</span>
-                        <span className="flex-1">{seg}<span className="text-emerald-800 opacity-50">~</span></span>
-                      </div>
-                    );
-                  }) : <div className="text-slate-600 italic">EDI stream unavailable. Click Re-Audit to generate.</div>}
+                  {inv.data.edi_810?.edi_string ? (
+                    <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowX: 'auto' }}>
+                      {formatEDI(inv.data.edi_810.edi_string)}
+                    </pre>
+                  ) : <div className="text-slate-600 italic">EDI stream unavailable. Click Re-Audit to generate.</div>}
                </div>
              </div>
           )}

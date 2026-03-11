@@ -1,11 +1,8 @@
 
-import { GoogleGenAI } from "@google/genai";
-
 /**
  * Repairs and normalizes an EDI 810 string using the specialized repair engine logic.
  */
 export const repairEDIStream = async (rawEdi: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
   
   const systemInstruction = `
     You are an expert X12 EDI 810 (Invoice) "repair + normalization" engine for version 005010.
@@ -30,15 +27,25 @@ export const repairEDIStream = async (rawEdi: string): Promise<string> => {
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `REPAIR THIS EDI INPUT:\n\n${rawEdi}`,
-      config: {
+    const response = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        parts: [{ text: `REPAIR THIS EDI INPUT:\n\n${rawEdi}` }],
         systemInstruction
-      }
+      })
     });
 
-    return response.text.trim();
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.candidates || data.candidates.length === 0) {
+      throw new Error("AI failed to generate a response for EDI repair.");
+    }
+    return data.candidates[0].content?.parts?.[0]?.text?.trim() || '';
   } catch (error) {
     console.error("EDI Repair Error:", error);
     throw new Error("Failed to refine EDI stream via AI.");

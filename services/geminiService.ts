@@ -1,5 +1,4 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
 import { DocumentResult, LineItem, ExtraField } from "../types";
 import { validateCode } from "./validationService";
 
@@ -161,7 +160,6 @@ export const normalizeData = (rawData: any, rawSections: any): DocumentResult =>
 export const extractStitchedInvoiceData = async (
   files: File[]
 ): Promise<DocumentResult[]> => {
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
   const parts = await Promise.all(files.map(async (f) => ({
     inlineData: { mimeType: 'image/jpeg', data: await resizeImage(f) }
   })));
@@ -201,82 +199,82 @@ export const extractStitchedInvoiceData = async (
   `;
 
   const schema = {
-    type: Type.OBJECT,
+    type: "object",
     properties: {
       document_groups: {
-        type: Type.ARRAY,
+        type: "array",
         items: {
-          type: Type.OBJECT,
+          type: "object",
           properties: {
             lossless_json: {
-              type: Type.OBJECT,
+              type: "object",
               properties: {
                 header: { 
-                  type: Type.OBJECT,
+                  type: "object",
                   properties: {
-                    vendor_name: { type: Type.STRING },
-                    vendor_address: { type: Type.STRING },
-                    vendor_city: { type: Type.STRING },
-                    vendor_state: { type: Type.STRING },
-                    vendor_zip: { type: Type.STRING },
-                    vendor_phone: { type: Type.STRING },
-                    buyer_name: { type: Type.STRING },
-                    buyer_address: { type: Type.STRING },
-                    buyer_city: { type: Type.STRING },
-                    buyer_state: { type: Type.STRING },
-                    buyer_zip: { type: Type.STRING },
-                    "customer_id/account": { type: Type.STRING },
-                    invoice_number: { type: Type.STRING },
-                    invoice_date: { type: Type.STRING },
-                    delivery_datetime: { type: Type.STRING },
-                    terms: { type: Type.STRING },
-                    po_number: { type: Type.STRING },
-                    route_stop_driver_salesrep: { type: Type.STRING },
-                    currency: { type: Type.STRING }
+                    vendor_name: { type: "string" },
+                    vendor_address: { type: "string" },
+                    vendor_city: { type: "string" },
+                    vendor_state: { type: "string" },
+                    vendor_zip: { type: "string" },
+                    vendor_phone: { type: "string" },
+                    buyer_name: { type: "string" },
+                    buyer_address: { type: "string" },
+                    buyer_city: { type: "string" },
+                    buyer_state: { type: "string" },
+                    buyer_zip: { type: "string" },
+                    "customer_id/account": { type: "string" },
+                    invoice_number: { type: "string" },
+                    invoice_date: { type: "string" },
+                    delivery_datetime: { type: "string" },
+                    terms: { type: "string" },
+                    po_number: { type: "string" },
+                    route_stop_driver_salesrep: { type: "string" },
+                    currency: { type: "string" }
                   }
                 },
                 totals: { 
-                  type: Type.OBJECT, 
+                  type: "object", 
                   properties: {
-                    invoice_total: { type: Type.NUMBER },
-                    total_due: { type: Type.NUMBER },
-                    total_discount: { type: Type.NUMBER },
-                    total_deposit: { type: Type.NUMBER },
-                    total_tax: { type: Type.NUMBER },
-                    total_credits: { type: Type.NUMBER },
-                    subtotal: { type: Type.NUMBER }
+                    invoice_total: { type: "number" },
+                    total_due: { type: "number" },
+                    total_discount: { type: "number" },
+                    total_deposit: { type: "number" },
+                    total_tax: { type: "number" },
+                    total_credits: { type: "number" },
+                    subtotal: { type: "number" }
                   }
                 },
                 line_items: { 
-                  type: Type.ARRAY, 
+                  type: "array", 
                   items: { 
-                    type: Type.OBJECT,
+                    type: "object",
                     properties: {
-                      line_no: { type: Type.NUMBER },
-                      item_id: { type: Type.STRING },
-                      upc_gtin: { type: Type.STRING },
-                      description: { type: Type.STRING },
-                      qty_purchased: { type: Type.NUMBER },
-                      uom_purchased: { type: Type.STRING },
-                      units_per_case: { type: Type.NUMBER },
-                      pack_structure_raw: { type: Type.STRING },
-                      container_size_raw: { type: Type.STRING },
-                      retail_price: { type: Type.STRING },
-                      gross_price: { type: Type.STRING },
-                      discount: { type: Type.NUMBER },
-                      deposit: { type: Type.NUMBER },
-                      sugar_fee: { type: Type.NUMBER },
-                      net_line_total: { type: Type.STRING }
+                      line_no: { type: "number" },
+                      item_id: { type: "string" },
+                      upc_gtin: { type: "string" },
+                      description: { type: "string" },
+                      qty_purchased: { type: "number" },
+                      uom_purchased: { type: "string" },
+                      units_per_case: { type: "number" },
+                      pack_structure_raw: { type: "string" },
+                      container_size_raw: { type: "string" },
+                      retail_price: { type: "string" },
+                      gross_price: { type: "string" },
+                      discount: { type: "number" },
+                      deposit: { type: "number" },
+                      sugar_fee: { type: "number" },
+                      net_line_total: { type: "string" }
                     }
                   } 
                 },
-                confidence_overall: { type: Type.NUMBER },
-                parsing_warnings: { type: Type.ARRAY, items: { type: Type.STRING } }
+                confidence_overall: { type: "number" },
+                parsing_warnings: { type: "array", items: { type: "string" } }
               }
             },
-            csv_preview: { type: Type.STRING },
-            edi_810_text: { type: Type.STRING },
-            extra_fields_audit_text: { type: Type.STRING }
+            csv_preview: { type: "string" },
+            edi_810_text: { type: "string" },
+            extra_fields_audit_text: { type: "string" }
           }
         }
       }
@@ -285,18 +283,29 @@ export const extractStitchedInvoiceData = async (
   };
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: { parts: [...parts, { text: "Stitch and audit these photos for high-fidelity extraction. Ensure every line item is captured." }] },
-      config: { 
+    const response = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        parts: [...parts, { text: "Stitch and audit these photos for high-fidelity extraction. Ensure every line item is captured." }],
         systemInstruction,
-        temperature: 0.1,
-        responseMimeType: "application/json",
         responseSchema: schema
-      }
+      })
     });
 
-    const result = JSON.parse(response.text || "{}");
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.candidates || data.candidates.length === 0) {
+      console.error("Gemini response missing candidates:", data);
+      throw new Error("AI failed to generate a response. Please try again.");
+    }
+
+    const text = data.candidates[0].content?.parts?.[0]?.text || '{}';
+    const result = JSON.parse(text);
     
     if (!result.document_groups || !Array.isArray(result.document_groups)) {
       throw new Error("Invalid response format from AI.");
