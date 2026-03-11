@@ -298,7 +298,7 @@ const App: React.FC = () => {
           <header className="text-center mb-12">
             <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center justify-center">
               <Database className="w-10 h-10 mr-4 text-indigo-600" />
-              Auditor Hub
+              AI Receipt-to-Inventory Manager
             </h1>
             <p className="text-slate-500 font-medium mt-2 tracking-wide uppercase text-xs">Multi-Photo Document Analysis</p>
           </header>
@@ -311,6 +311,9 @@ const App: React.FC = () => {
                   <p className="font-black text-slate-900">Drop Photos to Stitch</p>
                   <p className="text-[10px] text-slate-400 mt-2 uppercase font-bold tracking-widest leading-relaxed">Combine up to 5 images. Each image can be a separate receipt or a page of one.</p>
                 </div>
+                <p className="text-[10px] font-medium text-slate-400 text-center leading-relaxed">
+                  Demo Notice: This project was developed by Sushanth for demonstration purposes only. Do not upload sensitive or confidential documents.
+                </p>
               </div>
               <div className="flex flex-col h-[300px]">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Input Buffer ({batch.invoices.length})</h3>
@@ -363,7 +366,7 @@ const App: React.FC = () => {
       <aside className="w-80 bg-white border-r border-slate-200 h-screen sticky top-0 p-8 flex flex-col shadow-lg z-10">
         <div className="flex items-center space-x-4 mb-12">
           <div className="bg-slate-900 p-3 rounded-2xl text-white shadow-xl"><Database className="w-6 h-6" /></div>
-          <span className="font-black text-xl text-slate-900 tracking-tight leading-none">Senior Auditor</span>
+          <span className="font-black text-xl text-slate-900 tracking-tight leading-none text-wrap">AI Receipt-to-Inventory Manager</span>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin">
            {batch.invoices.map(inv => (
@@ -396,22 +399,33 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 p-16 max-w-7xl mx-auto h-screen overflow-y-auto">
-        {currentActiveInv ? (
-          <DocResultView 
-            inv={currentActiveInv} 
-            isPreviewing={previewingDocId === expandedDoc}
-            onTogglePreview={() => setPreviewingDocId(p => p ? null : expandedDoc)}
-            onEdit={handleEdit}
-            onSync={syncChanges}
-            onUpdateEDI={(newEdi: string) => updateInv(currentActiveInv.id, { data: { ...currentActiveInv.data!, edi_810: { ...currentActiveInv.data!.edi_810, edi_string: newEdi } } })}
-          />
-        ) : (
-          <div className="h-full flex flex-col items-center justify-center text-slate-300">
-            <LayoutGrid className="w-24 h-24 mb-6 opacity-10" />
-            <p className="font-black uppercase tracking-widest text-sm text-slate-400">Select results to review</p>
-          </div>
-        )}
+      <main className="flex-1 p-16 max-w-7xl mx-auto h-screen overflow-y-auto flex flex-col">
+        <div className="flex-1">
+          {currentActiveInv ? (
+            <DocResultView 
+              inv={currentActiveInv} 
+              isPreviewing={previewingDocId === expandedDoc}
+              onTogglePreview={() => setPreviewingDocId(p => p ? null : expandedDoc)}
+              onEdit={handleEdit}
+              onSync={syncChanges}
+              onUpdateEDI={(newEdi: string) => updateInv(currentActiveInv.id, { data: { ...currentActiveInv.data!, edi_810: { ...currentActiveInv.data!.edi_810, edi_string: newEdi } } })}
+            />
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-slate-300">
+              <LayoutGrid className="w-24 h-24 mb-6 opacity-10" />
+              <p className="font-black uppercase tracking-widest text-sm text-slate-400">Select results to review</p>
+            </div>
+          )}
+        </div>
+        
+        <footer className="mt-12 pt-8 border-t border-slate-200 text-center">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">
+            AI Receipt-to-Inventory Manager
+          </p>
+          <p className="text-[10px] font-medium text-slate-400 max-w-2xl mx-auto leading-relaxed">
+            Demo Notice: This project was developed by Sushanth for demonstration purposes only. Do not upload sensitive or confidential documents.
+          </p>
+        </footer>
       </main>
     </div>
   );

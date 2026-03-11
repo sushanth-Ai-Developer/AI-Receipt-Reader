@@ -1,5 +1,5 @@
 {
-  "name": "Invoice Batch Processor Pro",
+  "name": "AI Receipt-to-Inventory Manager",
   "description": "Enterprise-grade invoice batch conversion to X12 810 EDI and retail barcode label sheets.",
   "requestFramePermissions": [
     "camera"
