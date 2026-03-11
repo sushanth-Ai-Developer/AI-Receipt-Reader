@@ -1,6 +1,11 @@
-
+import { GoogleGenAI } from "@google/genai";
 import { DocumentResult, LineItem, ExtraField } from "../types";
 import { validateCode } from "./validationService";
+
+const getApiKey = () => {
+  // Priority: platform-injected key -> Vite env variable
+  return (import.meta as any).env?.VITE_GEMINI_API_KEY || (process as any).env?.GEMINI_API_KEY || "";
+};
 
 const resizeImage = (file: File, maxWidth = 1536, maxHeight = 1536): Promise<string> => {
   return new Promise((resolve) => {
@@ -262,28 +267,26 @@ export const extractStitchedInvoiceData = async (
   };
 
   try {
-    const response = await fetch('/api/process', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        parts: [...parts, { text: "Stitch and audit these photos for high-fidelity extraction. Ensure every line item is captured." }],
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new Error("Gemini API key is not configured. Please set VITE_GEMINI_API_KEY in your environment variables.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [
+        { parts: [...parts, { text: "Stitch and audit these photos for high-fidelity extraction. Ensure every line item is captured." }] }
+      ],
+      config: {
         systemInstruction,
-        responseSchema: schema
-      })
+        responseMimeType: "application/json",
+        responseSchema: schema,
+        temperature: 0.1
+      }
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `Server error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    if (!data.candidates || data.candidates.length === 0) {
-      console.error("Gemini response missing candidates:", data);
-      throw new Error("AI failed to generate a response. Please try again.");
-    }
-
-    const text = data.candidates[0].content?.parts?.[0]?.text || '{}';
+    const text = response.text || '{}';
     const result = JSON.parse(text);
     
     if (!result.document_groups || !Array.isArray(result.document_groups)) {
