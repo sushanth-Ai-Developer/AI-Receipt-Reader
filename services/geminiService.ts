@@ -2,7 +2,7 @@
 import { DocumentResult, LineItem, ExtraField } from "../types";
 import { validateCode } from "./validationService";
 
-const resizeImage = (file: File, maxWidth = 2048, maxHeight = 2048): Promise<string> => {
+const resizeImage = (file: File, maxWidth = 1536, maxHeight = 1536): Promise<string> => {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -30,7 +30,7 @@ const resizeImage = (file: File, maxWidth = 2048, maxHeight = 2048): Promise<str
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+        resolve(canvas.toDataURL('image/jpeg', 0.75).split(',')[1]);
       };
     };
   });
@@ -165,37 +165,16 @@ export const extractStitchedInvoiceData = async (
   })));
 
   const systemInstruction = `
-    You are a Senior Auditor and EDI Specialist. Your task is to extract EVERY SINGLE DETAIL from the provided images of invoices/receipts with 100% accuracy and ZERO LOSS of information.
+    You are a Senior Auditor and EDI Specialist. Extract EVERY detail from the provided images of invoices/receipts with 100% accuracy.
     
-    CRITICAL INSTRUCTIONS:
-    1. DOCUMENT IDENTIFICATION:
-       - You are provided with up to 5 images. These images could be:
-         a) Multiple pages of a single invoice.
-         b) Multiple separate, distinct receipts/invoices.
-         c) A mix of both.
-       - You MUST carefully analyze each image to determine if it's a continuation of a previous document or a new one.
-       - Produce one entry in the "document_groups" array for EACH distinct document found.
-       - If you see 5 separate receipts, you MUST produce 5 entries. If you see 5 pages of 1 invoice, produce 1 entry.
-    2. EXHAUSTIVE EXTRACTION (ZERO LOSS):
-       - Do NOT skip any line items. Extract EVERY product, service, fee, tax, or adjustment listed.
-       - If a receipt has 100 items, you MUST extract 100 items. 
-       - If an item description is long, capture the full description.
-       - If there are handwritten notes or stamps, capture them in "extra_fields_audit_text".
-    3. LINE ITEM DETAILS:
-       - Description: Full title as it appears.
-       - Quantity: Extract exactly as shown. If missing, assume 1.
-       - Unit Cost: Extract the price per unit (gross price) exactly as shown on the invoice. This is the most important field for the retail tags. If missing, calculate: extended_amount / quantity.
-       - Extended Amount: The total for that line.
-       - UPC/GTIN/SKU: Extract any codes associated with the item.
-    4. PACKAGING & LOGISTICS:
-       - Pay close attention to packaging terms (e.g., "Case of 12", "Pack", "Box", "Lbs").
-       - Extract "units_per_case" and "pack_structure_raw" if mentioned.
-    5. MATHEMATICAL CONSISTENCY:
-       - Ensure that (Quantity * Unit Cost) matches the Extended Amount. If there's a discrepancy, note it in "parsing_warnings".
-    6. ADAPTIVE VISION:
-       - If an image is rotated, blurry, or has poor lighting, use all available context to read it. Do not give up.
+    CRITICAL:
+    1. DOCUMENT IDENTIFICATION: Analyze up to 5 images. They could be multiple pages of one invoice or separate receipts. Produce one entry in "document_groups" for EACH distinct document.
+    2. EXHAUSTIVE EXTRACTION: Capture EVERY line item (product, service, fee, tax). ZERO LOSS.
+    3. LINE ITEM DETAILS: Capture full Description, exact Quantity (default 1), Unit Cost (gross price), Extended Amount, and any UPC/GTIN/SKU.
+    4. PACKAGING: Extract "units_per_case" and "pack_structure_raw" (e.g., "Case of 12").
+    5. CONSISTENCY: Ensure (Quantity * Unit Cost) = Extended Amount. Note discrepancies in "parsing_warnings".
     
-    Output MUST be a strictly valid JSON object with a "document_groups" array. No conversational text.
+    Output strictly valid JSON. No conversational text.
   `;
 
   const schema = {

@@ -356,7 +356,7 @@ const App: React.FC = () => {
             <div className="h-full bg-indigo-600 animate-pulse w-full" />
           </div>
           <p className="text-gray-400 text-xs mt-3">
-            ⏱ Typically takes 30–90 seconds depending on receipt count
+            ⏱ Typically takes 20–60 seconds. Large batches or high-res photos may take longer.
           </p>
           <p className="mt-8 text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">Cross-referencing photos and calculating unit costs...</p>
         </div>
