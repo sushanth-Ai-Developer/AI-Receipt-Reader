@@ -105,10 +105,11 @@ These files help reviewers understand the expected input format and quickly vali
 
 ### Sample Files
 
-- `samples/receipts/receipt_1.jpg`
-- `samples/receipts/receipt_2.jpg`
-- `samples/receipts/multi_part_receipt_1.jpg`
-- `samples/receipts/multi_part_receipt_2.jpg`
+- `sample_receipt_1.jpg`
+- `sample_receipt_2.jpg`
+- `sample_receipt_3.jpg`
+- `sample_receipt_4.jpg`
+- `sample_receipt_5.jpg`
 
 ### How to Use the Sample Files
 
