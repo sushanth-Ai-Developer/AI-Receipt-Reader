@@ -15,6 +15,8 @@ import {
   AppStep, BatchState, InvoiceState, DocumentResult, LineItem 
 } from './types';
 import { extractStitchedInvoiceData, roundToRetailEnding } from './services/geminiService';
+import { ReceiptAgentOrchestrator } from './agent/receiptAgentOrchestrator';
+import { ReceiptWorkflowState } from './agent/workflowState';
 import { generateEDI810FromData } from './services/ediService';
 import { generateCSVFromData } from './services/csvService';
 import { repairEDIStream } from './services/ediRepairService';
@@ -128,6 +130,7 @@ const App: React.FC = () => {
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
   const [previewingDocId, setPreviewingDocId] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string>('');
+  const [agentState, setAgentState] = useState<ReceiptWorkflowState | null>(null);
 
   const startOver = () => {
     batch.invoices.forEach(inv => { inv.previewUrls.forEach(url => URL.revokeObjectURL(url)); if (inv.pdfBlobUrl) URL.revokeObjectURL(inv.pdfBlobUrl); });
@@ -222,16 +225,42 @@ const App: React.FC = () => {
 
   const processBatch = async () => {
     setStep('PROCESSING');
-    setProcessingStatus('Performing Senior-Level Stitching Analysis...');
+    setProcessingStatus('Initializing Agent Workflow...');
     
     const allFiles = batch.invoices.flatMap(inv => inv.files);
-    const allPreviewUrls = batch.invoices.flatMap(inv => inv.previewUrls);
+    const orchestrator = new ReceiptAgentOrchestrator();
     
     try {
-      const results = await extractStitchedInvoiceData(allFiles);
+      const finalState = await orchestrator.start(allFiles, batch.name, (state) => {
+        setAgentState(state);
+        setProcessingStatus(state.userStatusMessage);
+      });
+
+      if (finalState.errorMessage) {
+        throw new Error(finalState.errorMessage);
+      }
+
+      if (finalState.parsedItems.length === 0 && finalState.validImages.length > 0) {
+        throw new Error("The auditor could not find any recognizable items in the valid receipts.");
+      }
+
+      // Map agent results back to the legacy BatchState for the UI
+      // We handle multiple documents if the agent metadata has them, otherwise we use the parsedItems
+      const results: DocumentResult[] = finalState.metadata.rawResults || [];
       
-      if (!results || results.length === 0) {
-        throw new Error("The auditor could not find any recognizable invoices in these photos.");
+      if (results.length === 0 && finalState.parsedItems.length > 0) {
+        // Fallback for single document extraction
+        results.push({
+          doc_id: Math.random().toString(36).substring(7),
+          doc_type: 'invoice',
+          invoice_identity: { vendor_name: 'Extracted Vendor', confidence_score_0_to_100: finalState.extractionConfidence * 100, source_images_count: finalState.validImages.length, buyer_name: '', invoice_number: '', invoice_date: '', po: '', currency: 'USD' },
+          header_fields: { vendor: { name: '', address: '', city: '', state: '', zip: '', phone: '' }, buyer: { name: '', address: '', city: '', state: '', zip: '', account_id: '' }, delivery: {}, payment_terms: {}, totals: { total_cost: 0, subtotal: 0, tax: 0, fees: 0, discounts: 0 }, route_driver_sales: {}, extra_fields: [] },
+          line_items: finalState.parsedItems,
+          edi_810: { edi_string: '' },
+          sections_raw: { json: '', csv: '', edi: '', extra: '' },
+          quality: { status: 'ok', issues: [], field_confidence: { total: finalState.extractionConfidence } },
+          exportedFiles: { edi: '', csv: '', labels: '', status: 'pending' }
+        });
       }
 
       const newInvoiceStates: InvoiceState[] = await Promise.all(results.map(async (data) => {
@@ -242,8 +271,8 @@ const App: React.FC = () => {
 
         return {
           id: data.doc_id,
-          files: allFiles,
-          previewUrls: allPreviewUrls,
+          files: finalState.validImages,
+          previewUrls: finalState.validImages.map(f => URL.createObjectURL(f)),
           status: data.quality.status === 'ok' ? 'DONE' : 'NEEDS_REVIEW',
           progress: 100,
           currentTask: 'Complete',
@@ -403,6 +432,19 @@ const App: React.FC = () => {
       </aside>
 
       <main className="flex-1 p-16 max-w-7xl mx-auto h-screen overflow-y-auto flex flex-col">
+        {agentState && agentState.warnings.length > 0 && (
+          <div className="mb-8 p-6 bg-amber-50 border border-amber-200 rounded-[32px] flex items-start space-x-4 animate-in slide-in-from-top duration-500">
+            <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-1" />
+            <div>
+              <h4 className="text-sm font-black text-amber-900 uppercase tracking-widest mb-1">Processing Warnings</h4>
+              <ul className="space-y-1">
+                {agentState.warnings.map((w, i) => (
+                  <li key={i} className="text-xs text-amber-700 font-medium">{w}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
         <div className="flex-1">
           {currentActiveInv ? (
             <DocResultView 
@@ -411,7 +453,13 @@ const App: React.FC = () => {
               onTogglePreview={() => setPreviewingDocId(p => p ? null : expandedDoc)}
               onEdit={handleEdit}
               onSync={syncChanges}
-              onUpdateEDI={(newEdi: string) => updateInv(currentActiveInv.id, { data: { ...currentActiveInv.data!, edi_810: { ...currentActiveInv.data!.edi_810, edi_string: newEdi } } })}
+              onUpdateEDI={(newEdi: string) => updateInv(currentActiveInv.id, { 
+                data: { 
+                  ...currentActiveInv.data!, 
+                  edi_810: { ...currentActiveInv.data!.edi_810, edi_string: newEdi },
+                  exportedFiles: { ...currentActiveInv.data!.exportedFiles, edi: newEdi }
+                } 
+              })}
             />
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-slate-300">
@@ -455,6 +503,7 @@ const DocResultView: React.FC<{
       .join('~\n');
 
   const confidence = inv.data.invoice_identity.confidence_score_0_to_100;
+  const ediContent = inv.data.exportedFiles?.edi || inv.data.edi_810?.edi_string || inv.data.sections_raw?.edi || '';
 
   const downloadCSV = () => {
     if (!inv.data) return;
@@ -470,10 +519,10 @@ const DocResultView: React.FC<{
   };
 
   const handleRefineEDI = async () => {
-    if (!inv.data?.edi_810?.edi_string) return;
+    if (!ediContent) return;
     setIsRefining(true);
     try {
-      const refined = await repairEDIStream(inv.data.edi_810.edi_string);
+      const refined = await repairEDIStream(ediContent);
       onUpdateEDI(refined);
     } catch (err) {
       alert("Failed to refine EDI. Check console for details.");
@@ -666,14 +715,14 @@ const DocResultView: React.FC<{
                      {isRefining ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />} 
                      Repair AI
                    </button>
-                   <button onClick={() => navigator.clipboard.writeText(inv.data?.edi_810?.edi_string || '')} className="flex items-center px-6 py-3 bg-slate-100 text-slate-700 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 border border-slate-200 transition-all"><Copy className="w-4 h-4 mr-2" /> Copy Raw</button>
-                   <a href={`data:text/plain;charset=utf-8,${encodeURIComponent(inv.data?.edi_810?.edi_string || '')}`} download={`EDI_${inv.id}.edi`} className="flex items-center px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl"><Download className="w-4 h-4 mr-2" /> Download .edi</a>
+                    <button onClick={() => navigator.clipboard.writeText(ediContent)} className="flex items-center px-6 py-3 bg-slate-100 text-slate-700 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 border border-slate-200 transition-all"><Copy className="w-4 h-4 mr-2" /> Copy Raw</button>
+                    <a href={`data:text/plain;charset=utf-8,${encodeURIComponent(ediContent)}`} download={`EDI_${inv.id}.edi`} className="flex items-center px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl"><Download className="w-4 h-4 mr-2" /> Download .edi</a>
                  </div>
                </div>
                <div className="flex-1 bg-slate-950 rounded-[40px] p-12 font-mono text-[12px] text-emerald-400 border border-slate-800 shadow-2xl overflow-auto leading-relaxed">
-                  {inv.data.edi_810?.edi_string ? (
+                  {ediContent ? (
                     <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowX: 'auto' }}>
-                      {formatEDI(inv.data.edi_810.edi_string)}
+                      {formatEDI(ediContent)}
                     </pre>
                   ) : <div className="text-slate-600 italic">EDI stream unavailable. Click Re-Audit to generate.</div>}
                </div>

@@ -89,7 +89,7 @@ export const generateEDI810FromData = (data: DocumentResult | null): string => {
     if (item.code_type === 'EAN-13') qualifier = 'EN';
 
     const lineNo = item.line_no || (idx + 1);
-    const codeValue = item.code_value ? `${delimiter}${qualifier}${delimiter}${item.code_value}` : '';
+    const codeValue = item.code_value ? `${qualifier}${delimiter}${item.code_value}` : '';
     
     segments.push(`IT1${delimiter}${lineNo}${delimiter}${qty}${delimiter}${uom}${delimiter}${price}${delimiter}${delimiter}${codeValue}`);
     

@@ -122,6 +122,12 @@ export interface DocumentResult {
     field_confidence: Record<string, number>;
     notes?: string;
   };
+  exportedFiles?: {
+    csv?: string;
+    edi?: string;
+    labels?: string;
+    status?: string;
+  };
 }
 
 export interface InvoiceState {

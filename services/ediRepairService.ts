@@ -38,7 +38,9 @@ export const repairEDIStream = async (rawEdi: string): Promise<string> => {
       }
     });
 
-    return response.text.trim();
+    const text = response.text.trim();
+    // Sanitize markdown fences if present
+    return text.replace(/```[a-z]*\n?/g, "").replace(/```\n?/g, "").trim();
   } catch (error) {
     console.error("EDI Repair Error:", error);
     throw new Error("Failed to refine EDI stream via AI.");
