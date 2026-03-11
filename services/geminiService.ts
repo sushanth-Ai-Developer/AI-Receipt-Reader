@@ -161,7 +161,7 @@ export const normalizeData = (rawData: any, rawSections: any): DocumentResult =>
 export const extractStitchedInvoiceData = async (
   files: File[]
 ): Promise<DocumentResult[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
   const parts = await Promise.all(files.map(async (f) => ({
     inlineData: { mimeType: 'image/jpeg', data: await resizeImage(f) }
   })));
